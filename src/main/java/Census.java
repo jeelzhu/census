@@ -53,7 +53,7 @@ public class Census {
      * We expect you to make use of all cores in the machine, specified by {@link #CORES).
      */
     public String[] top3Ages(List<String> regionNames) {
-        ThreadPoolExecutor threadPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(CORES);
+        ExecutorService threadPool = Executors.newFixedThreadPool(CORES);
         List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
                 .map(region -> CompletableFuture.supplyAsync(() -> createAgeQuantityTask(region), threadPool)
                         .exceptionally(ex -> {
@@ -62,15 +62,23 @@ public class Census {
                         }))
                 .collect(Collectors.toList());
 
-        Map<Integer, Integer> allRegionsAgeQuantityMap = futures.stream()
+        Map<Integer, Integer> allRegionsAgeQuantityMap = futures.parallelStream()
                 .map(CompletableFuture::join)
                 .flatMap(map -> map.entrySet().stream())
-                .collect(Collectors.toMap(
+                .collect(Collectors.toConcurrentMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue,
                         Integer::sum
                 ));
         threadPool.shutdown();
+        try {
+            if (!threadPool.awaitTermination(1, TimeUnit.MINUTES)) {
+                threadPool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            threadPool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         return retrieveTopAges(allRegionsAgeQuantityMap, 3);
     }
 
