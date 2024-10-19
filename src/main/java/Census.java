@@ -1,16 +1,18 @@
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Implement the two methods below. We expect this class to be stateless and thread safe.
  */
 public class Census {
+    private static final Logger LOGGER = Logger.getLogger(Census.class.getName());
+
     /**
      * Number of cores in the current machine.
      */
@@ -42,27 +44,7 @@ public class Census {
      * the 3 most common ages in the format specified by {@link #OUTPUT_FORMAT}.
      */
     public String[] top3Ages(String region) {
-        AgeInputIterator iterator = iteratorFactory.apply(region);
-        Map<Integer, Integer> ageQuantityMap = new HashMap<>();
-        try {
-            while (iterator.hasNext()) {
-                int age = iterator.next();
-                if (age >= 0) {
-                    ageQuantityMap.put(age, ageQuantityMap.getOrDefault(age, 0) + 1);
-                } else {
-                    // Handle invalid ages
-                    System.out.println("Invalid age: " + age);
-                }
-            }
-        } finally {
-            try {
-                iterator.close();
-            } catch (Exception e) {
-                // Handle potential close exception
-                System.out.println("Exception closing iterator");
-            }
-        }
-        return retrieveTopAges(ageQuantityMap, 3);
+        return retrieveTopAges(retrieveAgeQuantityMap(region), 3);
     }
 
     /**
@@ -72,25 +54,9 @@ public class Census {
      */
     public String[] top3Ages(List<String> regionNames) {
         ExecutorService threadPool = Executors.newFixedThreadPool(CORES);
-        List<Future<Map<Integer, Integer>>> futures = new ArrayList<>();
-
-        for (String region : regionNames) {
-            futures.add(threadPool.submit(() -> {
-                Map<Integer, Integer> ageQuantityMap = new HashMap<>();
-                try (AgeInputIterator iterator = iteratorFactory.apply(region)) {
-                    while (iterator.hasNext()) {
-                        int age = iterator.next();
-                        if (age >= 0) {
-                            ageQuantityMap.put(age, ageQuantityMap.getOrDefault(age, 0) + 1);
-                        }
-                    }
-                } catch (IOException e) {
-                    // Handle any exceptions during processing
-                    System.out.println("Exception processing region: " + region);
-                }
-                return ageQuantityMap;
-            }));
-        }
+        List<Future<Map<Integer, Integer>>> futures = regionNames.stream()
+                .map(region -> threadPool.submit(createAgeQuantityTask(region)))
+                .collect(Collectors.toList());
 
         // Combine results from all regions
         Map<Integer, Integer> allRegionsAgeQuantityMap = new HashMap<>();
@@ -101,12 +67,40 @@ public class Census {
                     allRegionsAgeQuantityMap.put(entry.getKey(), allRegionsAgeQuantityMap.getOrDefault(entry.getKey(), 0) + entry.getValue());
                 }
             } catch (Exception e) {
-                // Handle any exceptions during processing
-                System.out.println("Exception combining results");
+                LOGGER.log(Level.SEVERE, "Exception combining results", e);
             }
         }
         threadPool.shutdown();
+        try {
+            if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+                threadPool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            threadPool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         return retrieveTopAges(allRegionsAgeQuantityMap, 3);
+    }
+
+    private Callable<Map<Integer, Integer>> createAgeQuantityTask(String region) {
+        return () -> retrieveAgeQuantityMap(region);
+    }
+
+    private Map<Integer, Integer>  retrieveAgeQuantityMap(String region) {
+        Map<Integer, Integer> ageQuantityMap = new HashMap<>();
+        try (AgeInputIterator iterator = iteratorFactory.apply(region)) {
+            while (iterator.hasNext()) {
+                int age = iterator.next();
+                if (age >= 0) {
+                    ageQuantityMap.put(age, ageQuantityMap.getOrDefault(age, 0) + 1);
+                } else {
+                    LOGGER.log(Level.INFO,"Invalid age: " + age);
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Exception processing region: " + region, e);
+        }
+        return ageQuantityMap;
     }
 
     /*
