@@ -53,37 +53,29 @@ public class Census {
      * We expect you to make use of all cores in the machine, specified by {@link #CORES).
      */
     public String[] top3Ages(List<String> regionNames) {
-        ExecutorService threadPool = Executors.newFixedThreadPool(CORES);
-        List<Future<Map<Integer, Integer>>> futures = regionNames.stream()
-                .map(region -> threadPool.submit(createAgeQuantityTask(region)))
+        ThreadPoolExecutor threadPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(CORES);
+        List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
+                .map(region -> CompletableFuture.supplyAsync(() -> createAgeQuantityTask(region), threadPool)
+                        .exceptionally(ex -> {
+                            LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
+                            return Collections.emptyMap();
+                        }))
                 .collect(Collectors.toList());
 
-        // Combine results from all regions
-        Map<Integer, Integer> allRegionsAgeQuantityMap = new HashMap<>();
-        for (Future<Map<Integer, Integer>> future : futures) {
-            try {
-                Map<Integer, Integer> result = future.get();
-                for (Map.Entry<Integer, Integer> entry : result.entrySet()) {
-                    allRegionsAgeQuantityMap.put(entry.getKey(), allRegionsAgeQuantityMap.getOrDefault(entry.getKey(), 0) + entry.getValue());
-                }
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Exception combining results", e);
-            }
-        }
+        Map<Integer, Integer> allRegionsAgeQuantityMap = futures.stream()
+                .map(CompletableFuture::join)
+                .flatMap(map -> map.entrySet().stream())
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        Integer::sum
+                ));
         threadPool.shutdown();
-        try {
-            if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
-                threadPool.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            threadPool.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
         return retrieveTopAges(allRegionsAgeQuantityMap, 3);
     }
 
-    private Callable<Map<Integer, Integer>> createAgeQuantityTask(String region) {
-        return () -> retrieveAgeQuantityMap(region);
+    private Map<Integer, Integer> createAgeQuantityTask(String region) {
+        return retrieveAgeQuantityMap(region);
     }
 
     private Map<Integer, Integer>  retrieveAgeQuantityMap(String region) {
@@ -98,7 +90,9 @@ public class Census {
                 }
             }
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Exception processing region: " + region, e);
+            LOGGER.log(Level.SEVERE, "IOException processing region: " + region, e);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Unexpected exception processing region: " + region, e);
         }
         return ageQuantityMap;
     }
