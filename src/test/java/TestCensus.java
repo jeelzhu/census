@@ -14,14 +14,14 @@ import static org.junit.Assert.assertTrue;
 
 public class TestCensus {
     private static Function<String, Census.AgeInputIterator> factory = TestCensus::iteratorForRegion;
-    private static Census Census = new Census(factory);
+    private static Census census = new Census(factory);
     private static Map<String, Census.AgeInputIterator> createdIterators = new HashMap<>();
 
     @Test
     public void testCensusSingle_EmptyInput_ClosesIterator() {
         AgeIteratorWrapper iterator =
                 registerIterator(new AgeIteratorWrapper(Collections.emptyIterator(), "empty"));
-        String[] strings = Census.top3Ages("empty");
+        String[] strings = census.top3Ages("empty");
         assertTrue("Iterator hasn't been closed.", iterator.closed);
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));
@@ -31,7 +31,7 @@ public class TestCensus {
     @Test
     public void testCensusSingle_1Age_Success() {
             registerIterator(new AgeIteratorWrapper(ImmutableList.of(1).iterator(), "1item"));
-        String[] strings = Census.top3Ages("1item");
+        String[] strings = census.top3Ages("1item");
         System.out.println(Arrays.toString(strings));
         assertArrayEquals(new String[]{"1:1=1"}, strings);
     }
@@ -46,7 +46,7 @@ public class TestCensus {
                     }
                 });
         try {
-            Census.top3Ages("exception");
+            census.top3Ages("exception");
         } catch (RuntimeException e) {
             Assert.fail("Exceptions aren't being treated.");
         } finally {
@@ -59,7 +59,7 @@ public class TestCensus {
         AgeIteratorWrapper iterator =
                 registerIterator(new AgeIteratorWrapper(ImmutableList.of(0, 0, 0, 1, 1, 2, -1).iterator(), "invalidAge"));
         try {
-            String[] strings = Census.top3Ages("invalidAge");
+            String[] strings = census.top3Ages("invalidAge");
             System.out.println("Invalid ages ignored. Good one!");
             assertTrue("Iterator hasn't been closed.", iterator.closed);
             assertTrue("Invalid result null.", strings != null);
@@ -76,12 +76,10 @@ public class TestCensus {
     public void testCensusSingle_10_000_people_valid() {
         AgeIteratorWrapper iterator =
                 registerIterator(new AgeIteratorWrapper(newPseudoRandomIterator(10_000), "10_000"));
-        String[] strings = Census.top3Ages("10_000");
+        String[] strings = census.top3Ages("10_000");
         assertTrue("Iterator hasn't been closed.", iterator.closed);
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));
-
-        //assertArrayEquals(new String[]{"1:138=93", "2:10=85", "2:35=85", "3:90=84"}, strings);
         assertArrayEquals(new String[]{"1:138=93", "2:35=85", "3:10=85"}, strings);
     }
 
@@ -92,7 +90,7 @@ public class TestCensus {
                         .mapToObj(e -> registerIterator(new AgeIteratorWrapper(Collections.emptyIterator(), "empty" + e)))
                         .collect(Collectors.toList());
 
-        String[] strings = Census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
+        String[] strings = census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed));
         assertTrue("Invalid result null.", strings != null);
     }
@@ -104,7 +102,7 @@ public class TestCensus {
                         .mapToObj(e -> registerIterator(new AgeIteratorWrapper(Collections.emptyIterator(), "empty" + e)))
                         .collect(Collectors.toList());
 
-        String[] strings = Census.top3Ages(Stream.concat(Stream.of("invalid"), iterators.stream().map(e -> e.region)).collect(Collectors.toList()));
+        String[] strings = census.top3Ages(Stream.concat(Stream.of("invalid"), iterators.stream().map(e -> e.region)).collect(Collectors.toList()));
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed));
         assertTrue("Invalid result null.", strings != null);
     }
@@ -123,7 +121,7 @@ public class TestCensus {
             }
         });
 
-        String[] strings = Census.top3Ages(Stream.concat(Stream.of("invalid"), iterators.stream().map(e -> e.region)).collect(Collectors.toList()));
+        String[] strings = census.top3Ages(Stream.concat(Stream.of("invalid"), iterators.stream().map(e -> e.region)).collect(Collectors.toList()));
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed));
         assertTrue("Invalid result null.", strings != null);
     }
@@ -135,7 +133,7 @@ public class TestCensus {
                         .mapToObj(e -> registerIterator(new AgeIteratorWrapper(newPseudoRandomIterator(e * 10 + 1000), "multiple15_" + e)))
                         .collect(Collectors.toList());
 
-        String[] strings = Census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
+        String[] strings = census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed ));
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));
@@ -152,7 +150,7 @@ public class TestCensus {
                         .mapToObj(e -> registerIterator(new AgeIteratorWrapper(iterator, "share_place" + e)))
                         .collect(Collectors.toList());
 
-        String[] strings = Census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
+        String[] strings = census.top3Ages(iterators.stream().map(e -> e.region).collect(Collectors.toList()));
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed));
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));

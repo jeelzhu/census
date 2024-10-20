@@ -53,9 +53,9 @@ public class Census {
      * We expect you to make use of all cores in the machine, specified by {@link #CORES).
      */
     public String[] top3Ages(List<String> regionNames) {
-        ExecutorService threadPool = Executors.newFixedThreadPool(CORES);
+        ExecutorService threadPool = Executors.newCachedThreadPool();
         List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
-                .map(region -> CompletableFuture.supplyAsync(() -> createAgeQuantityTask(region), threadPool)
+                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), threadPool)
                         .exceptionally(ex -> {
                             LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
                             return Collections.emptyMap();
@@ -82,10 +82,9 @@ public class Census {
         return retrieveTopAges(allRegionsAgeQuantityMap, 3);
     }
 
-    private Map<Integer, Integer> createAgeQuantityTask(String region) {
-        return retrieveAgeQuantityMap(region);
-    }
-
+    /**
+     * Given a region name, retrieve the ages and their quantities from the source: iterator.
+     */
     private Map<Integer, Integer>  retrieveAgeQuantityMap(String region) {
         Map<Integer, Integer> ageQuantityMap = new HashMap<>();
         try (AgeInputIterator iterator = iteratorFactory.apply(region)) {
@@ -105,7 +104,7 @@ public class Census {
         return ageQuantityMap;
     }
 
-    /*
+    /**
      * Given a map of ages and their quantities, return the top N ages in the format specified by {@link #OUTPUT_FORMAT}.
      */
     private String[] retrieveTopAges(Map<Integer, Integer> ageQuantityMap, int top) {
