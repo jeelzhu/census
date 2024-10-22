@@ -53,32 +53,25 @@ public class Census {
      * We expect you to make use of all cores in the machine, specified by {@link #CORES).
      */
     public String[] top3Ages(List<String> regionNames) {
-        ExecutorService threadPool = Executors.newCachedThreadPool();
         List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
-                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), threadPool)
+                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), Executors.newCachedThreadPool())
                         .exceptionally(ex -> {
                             LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
                             return Collections.emptyMap();
                         }))
                 .collect(Collectors.toList());
 
-        Map<Integer, Integer> allRegionsAgeQuantityMap = futures.parallelStream()
+        CompletableFuture<Void> allOfFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+        CompletableFuture<Map<Integer, Integer>> combinedFuture = allOfFuture.thenApply(v -> futures.stream()
                 .map(CompletableFuture::join)
                 .flatMap(map -> map.entrySet().stream())
                 .collect(Collectors.toConcurrentMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue,
                         Integer::sum
-                ));
-        threadPool.shutdown();
-        try {
-            if (!threadPool.awaitTermination(1, TimeUnit.MINUTES)) {
-                threadPool.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            threadPool.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+                )));
+
+        Map<Integer, Integer> allRegionsAgeQuantityMap = combinedFuture.join();
         return retrieveTopAges(allRegionsAgeQuantityMap, 3);
     }
 
@@ -108,21 +101,17 @@ public class Census {
      * Given a map of ages and their quantities, return the top N ages in the format specified by {@link #OUTPUT_FORMAT}.
      */
     private String[] retrieveTopAges(Map<Integer, Integer> ageQuantityMap, int top) {
-        PriorityQueue<Map.Entry<Integer, Integer>> minHeap = new PriorityQueue<>(Map.Entry.comparingByValue());
-        // Use a min heap to find the top N ages
-        for (Map.Entry<Integer, Integer> entry : ageQuantityMap.entrySet()) {
-            minHeap.add(entry);
-            if (minHeap.size() > top) {
-                minHeap.poll();
-            }
-        }
-        int minHeapSize = minHeap.size();
-        String[] result = new String[minHeapSize];
-        int index = minHeapSize;
-        // Retrieve the top N ages from the min heap and format the output
-        while (!minHeap.isEmpty()) {
-            Map.Entry<Integer, Integer> entry = minHeap.poll();
-            result[--index] = String.format(OUTPUT_FORMAT, index+1, entry.getKey(), entry.getValue());
+        List<Map.Entry<Integer, Integer>> sortedEntries = ageQuantityMap.entrySet().stream()
+                .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey())) // Sort by value descending, then by key ascending
+                .limit(top)
+                .collect(Collectors.toList());
+
+        int size = Math.min(top, sortedEntries.size());
+        String[] result = new String[size];
+        for (int i = 0; i < size; i++) {
+            Map.Entry<Integer, Integer> entry = sortedEntries.get(i);
+            result[i] = String.format(OUTPUT_FORMAT, i + 1, entry.getKey(), entry.getValue());
         }
         return result;
     }

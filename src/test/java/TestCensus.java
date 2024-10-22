@@ -80,7 +80,7 @@ public class TestCensus {
         assertTrue("Iterator hasn't been closed.", iterator.closed);
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));
-        assertArrayEquals(new String[]{"1:138=93", "2:35=85", "3:10=85"}, strings);
+        assertArrayEquals(new String[]{"1:138=93", "2:10=85", "3:35=85"}, strings);
     }
 
     @Test
@@ -154,7 +154,7 @@ public class TestCensus {
         assertTrue("Iterator hasn't been closed.", iterators.stream().anyMatch(e -> e.closed));
         assertTrue("Invalid result null.", strings != null);
         System.out.println(Arrays.toString(strings));
-        assertArrayEquals(new String[]{"1:0=2500", "2:2=2500", "3:1=2500"}, strings);
+        assertArrayEquals(new String[]{"1:0=2500", "2:1=2500", "3:2=2500"}, strings);
     }
 
     // HELPER METHODS
