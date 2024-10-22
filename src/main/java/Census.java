@@ -28,6 +28,9 @@ public class Census {
      */
     private final Function<String, Census.AgeInputIterator> iteratorFactory;
 
+    private static final ExecutorService THREAD_POOL = Executors.newFixedThreadPool(CORES);
+
+
     /**
      * Creates a new Census calculator.
      *
@@ -54,25 +57,24 @@ public class Census {
      */
     public String[] top3Ages(List<String> regionNames) {
         List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
-                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), Executors.newCachedThreadPool())
+                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), THREAD_POOL)
                         .exceptionally(ex -> {
                             LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
                             return Collections.emptyMap();
                         }))
                 .collect(Collectors.toList());
 
-        CompletableFuture<Void> allOfFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-        CompletableFuture<Map<Integer, Integer>> combinedFuture = allOfFuture.thenApply(v -> futures.stream()
-                .map(CompletableFuture::join)
-                .flatMap(map -> map.entrySet().stream())
-                .collect(Collectors.toConcurrentMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        Integer::sum
-                )));
+        CompletableFuture<Map<Integer, Integer>> combinedFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> futures.stream()
+                        .map(CompletableFuture::join)
+                        .flatMap(map -> map.entrySet().stream())
+                        .collect(Collectors.toConcurrentMap(
+                                Map.Entry::getKey,
+                                Map.Entry::getValue,
+                                Integer::sum
+                        )));
 
-        Map<Integer, Integer> allRegionsAgeQuantityMap = combinedFuture.join();
-        return retrieveTopAges(allRegionsAgeQuantityMap, 3);
+        return combinedFuture.thenApply(result -> retrieveTopAges(result, 3)).join();
     }
 
     /**
