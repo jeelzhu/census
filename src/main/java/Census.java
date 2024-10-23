@@ -57,24 +57,22 @@ public class Census {
      */
     public String[] top3Ages(List<String> regionNames) {
         List<CompletableFuture<Map<Integer, Integer>>> futures = regionNames.stream()
-                .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), THREAD_POOL)
-                        .exceptionally(ex -> {
-                            LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
-                            return Collections.emptyMap();
-                        }))
-                .collect(Collectors.toList());
+            .map(region -> CompletableFuture.supplyAsync(() -> retrieveAgeQuantityMap(region), THREAD_POOL)
+                .exceptionally(ex -> {
+                    LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
+                    return Collections.emptyMap();
+                }))
+        .collect(Collectors.toList());
 
-        CompletableFuture<Map<Integer, Integer>> combinedFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> futures.stream()
-                        .map(CompletableFuture::join)
-                        .flatMap(map -> map.entrySet().stream())
-                        .collect(Collectors.toConcurrentMap(
-                                Map.Entry::getKey,
-                                Map.Entry::getValue,
-                                Integer::sum
-                        )));
-
-        return combinedFuture.thenApply(result -> retrieveTopAges(result, 3)).join();
+        Map<Integer, Integer> allRegionsAgeQuantityMap = futures.stream()
+            .map(CompletableFuture::join)
+            .flatMap(map -> map.entrySet().stream())
+            .collect(Collectors.toMap(
+                    Map.Entry::getKey,
+                    Map.Entry::getValue,
+                    Integer::sum
+            ));
+        return retrieveTopAges(allRegionsAgeQuantityMap, 3);
     }
 
     /**
