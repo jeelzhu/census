@@ -28,7 +28,7 @@ public class Census {
      */
     private final Function<String, Census.AgeInputIterator> iteratorFactory;
 
-    private static final ExecutorService THREAD_POOL = Executors.newFixedThreadPool(CORES);
+    private static final ExecutorService THREAD_POOL = Executors.newCachedThreadPool();
 
 
     /**
@@ -62,7 +62,7 @@ public class Census {
                     LOGGER.log(Level.SEVERE, "Exception processing region: " + region, ex);
                     return Collections.emptyMap();
                 }))
-        .collect(Collectors.toList());
+            .collect(Collectors.toList());
 
         Map<Integer, Integer> allRegionsAgeQuantityMap = futures.stream()
             .map(CompletableFuture::join)
